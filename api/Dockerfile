@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt \
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt \
     && useradd --create-home --uid 10001 appuser
 
 COPY --chown=appuser:appuser app/ ./app/
