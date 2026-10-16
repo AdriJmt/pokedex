@@ -1,9 +1,11 @@
 
 import json
-import os
+import re
 import time
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.error import URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -11,6 +13,9 @@ from psycopg.types.json import Jsonb
 
 # Racine du projet.
 ROOT = Path(__file__).resolve().parent.parent
+
+# URL officielle de la PokéAPI.
+POKEAPI_BASE_URL = "https://pokeapi.co/api/v2"
 
 
 # Lit les variables du fichier .env sans afficher les secrets.
@@ -30,20 +35,75 @@ def load_env():
     return env
 
 
-# Récupère une ressource JSON depuis la PokéAPI.
-def fetch_json(url):
+# Contrôle les redirections HTTP pour éviter les domaines externes.
+class PokeApiRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed_url = urlparse(newurl)
+
+        if (
+            parsed_url.scheme != "https"
+            or parsed_url.hostname != "pokeapi.co"
+            or parsed_url.port not in (None, 443)
+            or parsed_url.username is not None
+            or parsed_url.password is not None
+        ):
+            raise URLError("Redirection externe interdite")
+
+        return super().redirect_request(
+            req, fp, code, msg, headers, newurl
+        )
+
+
+# Récupère un JSON depuis un endpoint autorisé de la PokéAPI.
+def fetch_json(endpoint):
+    # Seuls les Pokémon et les espèces avec un identifiant positif sont autorisés.
+    if not re.fullmatch(
+        r"(?:pokemon|pokemon-species)/[1-9]\d*",
+        endpoint,
+    ):
+        raise ValueError(f"Endpoint PokéAPI invalide : {endpoint}")
+
+    # Construit l'URL depuis une base fixe.
+    url = f"{POKEAPI_BASE_URL}/{endpoint}"
+
     request = Request(
         url,
         headers={"User-Agent": "PokedexApp/1.0"},
     )
 
-    with urlopen(request, timeout=30) as response:
+    # Utilise un gestionnaire qui contrôle les redirections.
+    opener = build_opener(PokeApiRedirectHandler)
+
+    with opener.open(request, timeout=30) as response:
         return json.load(response)
 
 
-# Récupère le nom et la description française d'un Pokémon.
+# Récupère le nom et la description française d'une espèce.
 def get_french_info(species_url):
-    species = fetch_json(species_url)
+    parsed_url = urlparse(species_url)
+
+    # Vérifie que l'URL correspond au domaine officiel.
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.netloc != "pokeapi.co"
+        or parsed_url.query
+        or parsed_url.fragment
+    ):
+        raise ValueError("URL d'espèce PokéAPI invalide")
+
+    # Accepte uniquement le chemin officiel d'une espèce.
+    match = re.fullmatch(
+        r"/api/v2/pokemon-species/([1-9]\d*)/?",
+        parsed_url.path,
+    )
+
+    if not match:
+        raise ValueError("Chemin d'espèce PokéAPI invalide")
+
+    species_id = match.group(1)
+
+    # Reconstruit un endpoint contrôlé plutôt que d'utiliser l'URL reçue.
+    species = fetch_json(f"pokemon-species/{species_id}")
 
     name_fr = next(
         (
@@ -56,9 +116,7 @@ def get_french_info(species_url):
 
     description = next(
         (
-            entry["flavor_text"]
-            .replace("\n", " ")
-            .replace("\f", " ")
+            entry["flavor_text"].replace("\n", " ").replace("\f", " ")
             for entry in species["flavor_text_entries"]
             if entry["language"]["name"] == "fr"
         ),
@@ -82,12 +140,11 @@ def main():
         ) as connection,
         connection.cursor() as cursor,
     ):
-        # Importe les 1025 Pokémon standards.
+        # Importe les 1 025 Pokémon standards.
         for pokemon_id in range(1, 1026):
             try:
-                pokemon = fetch_json(
-                    f"https://pokeapi.co/api/v2/pokemon/{pokemon_id}"
-                )
+                # L'endpoint est construit à partir d'un identifiant numérique.
+                pokemon = fetch_json(f"pokemon/{pokemon_id}")
 
                 name_fr, description, species = get_french_info(
                     pokemon["species"]["url"]
