@@ -1,1 +1,2 @@
+cd front
 npx --no -- commitlint --edit "$1"
