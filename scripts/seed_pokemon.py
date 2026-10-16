@@ -21,6 +21,8 @@ SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
 IMAGES_DIR = Path("images")
 MODELS_DIR = Path("modeles")
 
+EXPECTED_BUCKET_OWNER = os.getenv("EXPECTED_BUCKET_OWNER", "")
+
 # API PokéAPI : liste des Pokémon
 POKEAPI_URL = "https://pokeapi.co/api/v2/pokemon"
 
@@ -48,7 +50,7 @@ s3 = boto3.client(
     endpoint_url=S3_ENDPOINT,
     aws_access_key_id=ACCESS_KEY,
     aws_secret_access_key=SECRET_KEY,
-    region_name="us-east-1",
+    region_name=os.getenv("AWS_REGION"),
     config=Config(signature_version="s3v4"),
 )
 
@@ -135,6 +137,37 @@ def upload_file(path, object_key, content_type):
         return False
 
 
+def process_asset(
+    pokemon_id,
+    url_template,
+    directory,
+    extension,
+    object_prefix,
+    content_type,
+    label,
+):
+    """Télécharge puis envoie un fichier vers le stockage S3."""
+
+    filename = f"{pokemon_id:04d}.{extension}"
+    path = directory / filename
+    url = url_template.format(id=pokemon_id)
+
+    # Télécharger le fichier ou réutiliser le fichier local.
+    if not download_file(url, path):
+        print(f"  {label} : indisponible")
+        return False
+
+    # Envoyer le fichier vers le stockage.
+    object_key = f"{object_prefix}/{filename}"
+
+    if not upload_file(path, object_key, content_type):
+        print(f"  {label} : échec de l'envoi")
+        return False
+
+    print(f"  {label} : OK")
+    return True
+
+
 # ============================================================
 # PROGRAMME PRINCIPAL
 # ============================================================
@@ -151,7 +184,10 @@ def main():
 
     # Vérifier l'accès au bucket S3.
     try:
-        s3.head_bucket(Bucket=BUCKET_NAME)
+        s3.head_bucket(
+            Bucket=BUCKET_NAME,
+            ExpectedBucketOwner=EXPECTED_BUCKET_OWNER,
+        )
     except (ClientError, BotoCoreError) as error:
         print(f"Impossible d'accéder au bucket {BUCKET_NAME} : {error}")
         return
@@ -172,51 +208,34 @@ def main():
 
         print(f"\n[{index}/{total}] Pokémon #{pokemon_name}")
 
-        # ----------------------------------------------------
-        # 1. IMAGE
-        # ----------------------------------------------------
-
-        image_path = IMAGES_DIR / f"{pokemon_name}.png"
-        image_url = IMAGE_URL.format(id=pokemon_id)
-
-        if download_file(image_url, image_path):
-            if upload_file(
-                image_path,
-                f"images/{pokemon_name}.png",
-                "image/png",
-            ):
-                images_ok += 1
-                print("  Image : OK")
-            else:
-                images_missing.append(pokemon_id)
-                print("  Image : échec de l'envoi")
+        # Traiter l'image du Pokémon.
+        if process_asset(
+            pokemon_id,
+            IMAGE_URL,
+            IMAGES_DIR,
+            "png",
+            "images",
+            "image/png",
+            "Image",
+        ):
+            images_ok += 1
         else:
             images_missing.append(pokemon_id)
-            print("  Image : indisponible")
 
-        # ----------------------------------------------------
-        # 2. MODÈLE 3D
-        # ----------------------------------------------------
-
-        model_path = MODELS_DIR / f"{pokemon_name}.glb"
-        model_url = MODEL_URL.format(id=pokemon_id)
-
-        if download_file(model_url, model_path):
-            if upload_file(
-                model_path,
-                f"models/{pokemon_name}.glb",
-                "model/gltf-binary",
-            ):
-                models_ok += 1
-                print("  Modèle 3D : OK")
-            else:
-                models_missing.append(pokemon_id)
-                print("  Modèle 3D : échec de l'envoi")
+        # Traiter le modèle 3D du Pokémon.
+        if process_asset(
+            pokemon_id,
+            MODEL_URL,
+            MODELS_DIR,
+            "glb",
+            "models",
+            "model/gltf-binary",
+            "Modèle 3D",
+        ):
+            models_ok += 1
         else:
             models_missing.append(pokemon_id)
-            print("  Modèle 3D : indisponible")
 
-        # Petite pause entre les Pokémon.
         time.sleep(0.1)
 
     # ========================================================
