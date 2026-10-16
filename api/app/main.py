@@ -6,6 +6,8 @@ import psycopg
 from psycopg.rows import dict_row
 from fastapi import Depends, FastAPI, HTTPException, Query
 
+from app.schemas.pokemon import HealthResponse, PokemonResponse
+
 app = FastAPI(
     title="Pokedex API",
     description="API du Pokédex",
@@ -22,7 +24,7 @@ DatabaseUrl = Annotated[str, Depends(get_database_url)]
 
 
 @app.get("/health")
-def health_check():
+def health_check() -> HealthResponse:
     """Vérifie que l'API répond."""
     return {"status": "ok"}
 
@@ -37,7 +39,7 @@ def get_pokemon(
     database_url: DatabaseUrl,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
-):
+) -> list[PokemonResponse]:
     """Récupère une liste paginée de Pokémon depuis PostgreSQL."""
     try:
         with (
