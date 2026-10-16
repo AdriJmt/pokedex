@@ -1,0 +1,121 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-pokemon
+      author: pokedex
+      changes:
+        - createTable:
+            tableName: pokemon
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: pokedex_number
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: name_fr
+                  type: VARCHAR(100)
+
+              - column:
+                  name: height
+                  type: INTEGER
+
+              - column:
+                  name: weight
+                  type: INTEGER
+
+              - column:
+                  name: base_experience
+                  type: INTEGER
+
+              - column:
+                  name: types
+                  type: JSONB
+                  defaultValueComputed: "'[]'::jsonb"
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: abilities
+                  type: JSONB
+                  defaultValueComputed: "'[]'::jsonb"
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: stats
+                  type: JSONB
+                  defaultValueComputed: "'[]'::jsonb"
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: description
+                  type: TEXT
+
+              - column:
+                  name: capture_rate
+                  type: INTEGER
+
+              - column:
+                  name: is_legendary
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_mythical
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: image_key
+                  type: VARCHAR(255)
+
+              - column:
+                  name: model_key
+                  type: VARCHAR(255)
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: pokemon
+            indexName: idx_pokemon_name
+            columns:
+              - column:
+                  name: name
+
+        - createIndex:
+            tableName: pokemon
+            indexName: idx_pokemon_pokedex_number
+            columns:
+              - column:
+                  name: pokedex_number
